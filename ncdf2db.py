@@ -819,7 +819,7 @@ def main(argv):
 			i0 = south_north / 2 + indx[1] - 1
 			station['i0'] = i0
 			station['j0'] = j0
-                        station['source_id'] = source_id
+			station['source_id'] = source_id
 
 
 			if (i0 >= 0 and i0 < south_north) and ( j0 >= 0 and j0 < west_east) and ( (country == 'All') or (country == station['country'])):

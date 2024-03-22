@@ -1,4 +1,3 @@
-import re
 snx = open("tmp/BGR-RT-xxxxx-TEF-FIX-xxxx-IF_240223_1300.snx2",'r')
 started_reading = False
 for line in snx:

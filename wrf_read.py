@@ -1,7 +1,7 @@
 from netCDF4 import Dataset as netcdf
 import numpy as np
 
-def getclosest_ij(lons,lats,latpt,lonpt):
+def getclosest_ij(lons,lats,lonpt,latpt):
   # find squared distance of every point on grid
   dist_sq = (lats-latpt)**2 + (lons-lonpt)**2
   # 1D index of minimum dist_sq element
@@ -36,8 +36,9 @@ south_north = ncfile.dimensions['south_north']
 # print(lat[0].size)
 
 # ot snx file tmp\BGR-RT-xxxxx-TEF-FIX-xxxx-IF_240223_1400.snx2
-# BGER00BGR  A XXXXXXXXX P Bardarski geran/Bulg/B  23.953740  43.541928   201.781   167.801
-i,j = getclosest_ij(lat[0][:],lon[0][:],23.953740,43.541928)
+# stat                                             lon        lat
+# SUZF00BGR  A XXXXXXXXX P Sofia /Bulgaria     /B  23.329108  42.673810   674.698   639.679
+i,j = getclosest_ij(lon[0][:],lat[0][:],23.329108,42.673810)
 # print(i,j)
 print(pres[0][i][j]/100)
 print(temp[0][i][j]-273.15)

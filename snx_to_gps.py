@@ -10,6 +10,8 @@ for line in snx:
             # Reading TROTOT
             formatted[2] = float(formatted[2])/1000
             print(formatted)
+        elif line.startswith("-TROP/SOLUTION"):
+            started_reading = False
 
         
 snx.close()

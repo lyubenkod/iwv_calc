@@ -40,8 +40,7 @@ south_north = ncfile.dimensions['south_north']
 # SUZF00BGR  A XXXXXXXXX P Sofia /Bulgaria     /B  23.329108  42.673810   674.698   639.679
 i,j = getclosest_ij(lon[0][:],lat[0][:],23.329108,42.673810)
 # print(i,j)
-print(pres[0][i][j]/100)
-print(temp[0][i][j]-273.15)
+print(time[:].tobytes().decode("utf-8"),temp[0][i][j]-273.15,pres[0][i][j]/100)
 
 # Close the NetCDF file
 ncfile.close()

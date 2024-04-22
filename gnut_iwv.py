@@ -1,8 +1,39 @@
 from datetime import datetime,timedelta
 import math
 
-#met
+def read_gps_from_snx(file,stations):
+    snx = open(file,'r')
+    result = []
+    started_reading = False
+    for line in snx:
+        if line.startswith("+TROP/SOLUTION"):
+            started_reading = True
+        elif started_reading:
+            for station in stations:
+                if line.startswith(" "+station):
+                    formatted = line.strip().split(' ')[:3]
+                    # Reading TROTOT
+                    date = formatted[1].split(':')
+                    day_in_seconds = float(date[2])
 
+                    day_in_hours = day_in_seconds/3600
+                    hours = math.floor(day_in_hours)
+                    minutes_full = (day_in_hours-hours)*60
+                    minutes = round(minutes_full,3)
+                    seconds = round((minutes_full-minutes)*60,3)
+                    actual_date = datetime(int(date[0]),1,1) + timedelta(int(date[1])-1)
+                    actual_date += timedelta(0,seconds,0,0,minutes,hours,0)
+
+                    formatted[1] = actual_date
+                    formatted[2] = float(formatted[2])/1000
+
+                    result.append(formatted)
+        elif line.startswith("-TROP/SOLUTION"):
+            started_reading = False
+    snx.close()
+    return result
+
+#met
 fid = open('tmp/met.dat')
 met_all = fid.readlines()
 fid.close()
@@ -25,15 +56,16 @@ for i in range(len(met_all)):
 #met_all[i][3]=pressure
 
 #gps
-fid = open('tmp/gps.dat')
-gps_all = fid.readlines()
-fid.close()
+# fid = open('tmp/gps.dat')
+# gps_all = fid.readlines()
+# fid.close()
+gps_all = read_gps_from_snx('tmp/BGR-RT-xxxxx-TEF-FIX-xxxx-IF_240223_1400.snx2',["SUZF00BGR"])
 
 # cleanup and datetime conversion
-for i in range(len(gps_all)):
-    gps_all[i] = gps_all[i].removesuffix('\n').split('\t')
-    gps_all[i][1] = datetime.strptime(gps_all[i][1],'%Y-%m-%d %H:%M:%S')
-    gps_all[i][2] = float(gps_all[i][2])
+# for i in range(len(gps_all)):
+#     gps_all[i] = gps_all[i].removesuffix('\n').split('\t')
+#     gps_all[i][1] = datetime.strptime(gps_all[i][1],'%Y-%m-%d %H:%M:%S')
+#     gps_all[i][2] = float(gps_all[i][2])
 
 #gps_all[i][0]=station
 #gps_all[i][1]=datetime

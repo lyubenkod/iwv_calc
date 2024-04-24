@@ -4,15 +4,7 @@ import math
 import numpy as np
 from netCDF4 import Dataset as netcdf
 
-def read_met_from_wrf(file,lon,lat):
-    def getclosest_ij(lons,lats,lonpt,latpt):
-        # find squared distance of every point on grid
-        dist_sq = (lats-latpt)**2 + (lons-lonpt)**2
-        # 1D index of minimum dist_sq element
-        minindex_flattened = dist_sq.argmin()
-        # Get 2D index for latvals and lonvals arrays from 1D index
-        return np.unravel_index(minindex_flattened, lats.shape)
-
+def read_met_from_wrf(file,lonpt,latpt):
     # Open the NetCDF file
     ncfile = netcdf(file)
 
@@ -33,18 +25,17 @@ def read_met_from_wrf(file,lon,lat):
     west_east = ncfile.dimensions['west_east']
     south_north = ncfile.dimensions['south_north']
 
-    # Print the variables
-    # print(temp[0].size)
-    # print(pres[0].size)
-    # print(lon[0].size)
-    # print(lat[0].size)
-
     # ot snx file tmp\BGR-RT-xxxxx-TEF-FIX-xxxx-IF_240223_1400.snx2
     # stat                                             lon        lat
     # SUZF00BGR  A XXXXXXXXX P Sofia /Bulgaria     /B  23.329108  42.673810   674.698   639.679
-    i,j = getclosest_ij(lon[0][:],lat[0][:],lon,lat)
+    # find squared distance of every point on grid
+    dist_sq = (lat[0][:]-latpt)**2 + (lon[0][:]-lonpt)**2
+    # 1D index of minimum dist_sq element
+    minindex_flattened = dist_sq.argmin()
+    # Get 2D index for latvals and lonvals arrays from 1D index
+    i,j = np.unravel_index(minindex_flattened, lat[0][:].shape)
+    # i,j = getclosest_ij(lon[0][:],lat[0][:],lonpt,latpt)
     #TODO copy calculations from ncdf2db.py for temp and press
-    # print(time[:].tobytes().decode("utf-8"),temp[0][i][j]-273.15,pres[0][i][j]/100)
     date = datetime.strptime(time[0].tobytes().decode("utf-8"),"%Y-%m-%d_%H:%M:%S")
     temperature = temp[0][i][j]-273.15
     pressure = pres[0][i][j]/100
@@ -160,6 +151,7 @@ metstat = metstat[0]
 #average datetime intervals
 
 t = met_all[0][1]
+print(t)
 step = timedelta(0,0,0,0,5,0,0) # 5 mins
 met = []
 gps = []
@@ -183,6 +175,8 @@ while t <= met_all[-1][1] + step:
     count = 0
     for i in range(len(gps_all)):
         # if between step time 
+        print(gps_all[i][1])
+        print(t-step/2)
         if gps_all[i][1] > t-step/2 and gps_all[i][1] < t+step/2:
             ztd += gps_all[i][2]
             count += 1

@@ -15,27 +15,13 @@ def read_met_from_wrf(file,lonpt,latpt):
     lat = ncfile.variables['XLAT']
     lon = ncfile.variables['XLONG']
 
-    truelat1 = ncfile.TRUELAT1
-    truelat2 = ncfile.TRUELAT2
-    ref_lat  = ncfile.CEN_LAT
-    ref_lon  = ncfile.CEN_LON
-    stand_lon= ncfile.STAND_LON
-    dx = ncfile.DX
-    dy = ncfile.DY
-    west_east = ncfile.dimensions['west_east']
-    south_north = ncfile.dimensions['south_north']
-
-    # ot snx file tmp\BGR-RT-xxxxx-TEF-FIX-xxxx-IF_240223_1400.snx2
-    # stat                                             lon        lat
-    # SUZF00BGR  A XXXXXXXXX P Sofia /Bulgaria     /B  23.329108  42.673810   674.698   639.679
     # find squared distance of every point on grid
     dist_sq = (lat[0][:]-latpt)**2 + (lon[0][:]-lonpt)**2
     # 1D index of minimum dist_sq element
     minindex_flattened = dist_sq.argmin()
     # Get 2D index for latvals and lonvals arrays from 1D index
     i,j = np.unravel_index(minindex_flattened, lat[0][:].shape)
-    # i,j = getclosest_ij(lon[0][:],lat[0][:],lonpt,latpt)
-    #TODO copy calculations from ncdf2db.py for temp and press
+
     date = datetime.strptime(time[0].tobytes().decode("utf-8"),"%Y-%m-%d_%H:%M:%S")
     temperature = temp[0][i][j]-273.15
     pressure = pres[0][i][j]/100
@@ -43,7 +29,6 @@ def read_met_from_wrf(file,lonpt,latpt):
     ncfile.close()
 
     #TODO Figure out what to do with station id
-    # Close the NetCDF file
     return [["3296",date,temperature,pressure]]
 
 
@@ -81,22 +66,6 @@ def read_gps_from_snx(file,stations):
     return result
 
 #met
-# fid = open('tmp/met.dat')
-# met_all = fid.readlines()
-# fid.close()
-
-# # cleanup and datetime conversion
-# for i in range(len(met_all)):
-#     met_all[i] = met_all[i].removesuffix('\n').split('\t')
-#     met_all[i][1] = datetime.strptime(met_all[i][1],'%Y-%m-%d %H:%M:%S')
-#     met_all[i][2] = float(met_all[i][2])
-#     met_all[i][3] = float(met_all[i][3])
-
-# # No kelvin
-# for i in range(len(met_all)):
-#     if met_all[i][2] > 200:
-#         met_all[i][2] -= 273.15
-# SUZF00BGR  A XXXXXXXXX P Sofia /Bulgaria     /B  23.329108  42.673810   674.698   639.679
 met_all = read_met_from_wrf('tmp/wrfout_d03_2024-03-14_14_00_00',23.329108,42.673810)
 print(met_all)
 
@@ -111,7 +80,6 @@ gps_all = read_gps_from_snx('tmp/BGR-RT-xxxxx-TEF-FIX-xxxx-IF_240223_1400.snx2',
 #gps_all[i][0]=station
 #gps_all[i][1]=datetime
 #gps_all[i][2]=ZTD
-
 
 #coords
 fid = open('tmp/stat1.dat')

@@ -115,15 +115,12 @@ argv = {
     "station": '',
     "gps_stat_file": '',
     "met_stat_file": '',
-    "lon": -1, #optional
-    "lat": -1, #optional
     "output_file": '', #optional
 }
 #TODO integrate stat1 and stat2 files directly
 # cli arguments
-# python3 gnut_iwv.py --snx_file snx_file --wrf_file wrf_file --station station --gps_stat_file gps_stat_file --met_stat_file met_stat_file [--lon lon --lat lat --output_file output_file]
 if len(sys.argv) == 1:
-    print("Usage: python3 gnut_iwv.py --snx_file snx_file --wrf_file wrf_file --station station --gps_stat_file gps_stat_file --met_stat_file met_stat_file [--lon lon --lat lat --output_file output_file]")
+    print("Usage: python3 gnut_iwv.py --snx_file snx_file --wrf_file wrf_file --station station --gps_stat_file gps_stat_file --met_stat_file met_stat_file [--output_file output_file]")
     sys.exit(1)
 for i in range(1,len(sys.argv),2):
     if len(sys.argv) < i+1:
@@ -135,20 +132,15 @@ if argv['snx_file'] == '' or argv['wrf_file'] == '' or argv['station'] == '' or 
     print("Missing required arguments. Exiting...")
     sys.exit(1)
 
-lon,lat = argv['lon'],argv['lat']
 
 try:
-    gps_all, coords = read_gps_from_snx(argv["snx_file"],argv["station"])
+    gps_all, (lon,lat) = read_gps_from_snx(argv["snx_file"],argv["station"])
     if len(gps_all) == 0:
         print("No GPS data found. Exiting...")
         sys.exit(1)
     #gps_all[i][0]=station
     #gps_all[i][1]=datetime
     #gps_all[i][2]=ZTD
-
-    if lon == -1 or lat == -1:
-        lon,lat = coords
-        print("No coordinates provided. Using coordinates from snx file... ({0},{1})".format(lon,lat))
 
     if lon == -1 or lat == -1:
         print("No coordinates found. Exiting...")
@@ -172,7 +164,7 @@ try:
     gpsstat = fid.readlines()
     fid.close()
 
-    gpsstat[0] = gpsstat[0].removesuffix('\n').split('\t')
+    gpsstat[0] = gpsstat[0].removesuffix('\n').split()
     gpsstat[0][0] = int(gpsstat[0][0])
     gpsstat[0][1] = float(gpsstat[0][1])
     gpsstat[0][2] = float(gpsstat[0][2])

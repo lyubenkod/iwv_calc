@@ -165,7 +165,7 @@ def process_station_tro(station, ncfile):
     finally:
         return result
 
-ncfile = netcdf('tmp/wrfout_d03_2024-03-14_14_00_00')
+ncfile = netcdf('../../wrf_files_usb/wrfout_d03_2024-05-10_110000')
 
 station = {
     'name' : 'SUZF00BGR',

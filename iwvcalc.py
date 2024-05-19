@@ -113,14 +113,12 @@ argv = {
     "snx_file": '',
     "wrf_file": '',
     "station": '',
-    "gps_stat_file": '',
-    "met_stat_file": '',
     "output_file": '', #optional
 }
 #TODO integrate stat1 and stat2 files directly
 # cli arguments
 if len(sys.argv) == 1:
-    print("Usage: python3 gnut_iwv.py --snx_file snx_file --wrf_file wrf_file --station station --gps_stat_file gps_stat_file --met_stat_file met_stat_file [--output_file output_file]")
+    print("Usage: python3 gnut_iwv.py --snx_file snx_file --wrf_file wrf_file --station station [--output_file output_file]")
     sys.exit(1)
 for i in range(1,len(sys.argv),2):
     if len(sys.argv) < i+1:
@@ -295,7 +293,7 @@ try:
         gpsmet[i].append(ak[-1]*gpsmet[i][-1]*1000) # iwv
 
         # gps station id
-        gpsmet[i].append(gpsstat[0])
+        # gpsmet[i].append(gpsstat[0])
         # gps source id
         gpsmet[i].append(gpsstat[3])
         # met source_id
@@ -314,7 +312,6 @@ try:
     #gpsmet[i][4] = zhd
     #gpsmet[i][5] = zwd
     #gpsmet[i][6] = iwv
-    #gpsmet[i][7] = station id
     #gpsmet[i][8] = source gnss id
     #gpsmet[i][9] = source met id
     #gpsmet[i][10] = station_latitude
@@ -325,13 +322,13 @@ try:
     if argv['output_file'] != '':
         print("Writing to file {0}".format(argv['output_file']))
         fid = open(argv['output_file'],'w')
-        fid.write('time,ztd,temp,pressure,zhd,zwd,iwv,station_id,source_gnss_id,source_met_id,station_latitude,station_altitude,station_longitude\n')
+        fid.write('time,ztd,temp,pressure,zhd,zwd,iwv,source_gnss_id,source_met_id,station_latitude,station_altitude,station_longitude\n')
         for i in range(len(gpsmet)):
-            fid.write('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12}\n'.format(gpsmet[i][0],gpsmet[i][1],gpsmet[i][2],gpsmet[i][3],gpsmet[i][4],gpsmet[i][5],gpsmet[i][6],gpsmet[i][7],gpsmet[i][8],gpsmet[i][9],gpsmet[i][10],gpsmet[i][11],gpsmet[i][12]))
+            fid.write('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12}\n'.format(gpsmet[i][0],gpsmet[i][1],gpsmet[i][2],gpsmet[i][3],gpsmet[i][4],gpsmet[i][5],gpsmet[i][6],gpsmet[i][7],gpsmet[i][8],gpsmet[i][9],gpsmet[i][10],gpsmet[i][11]))
         fid.close()
     else:
         for i in range(len(gpsmet)):
-            print('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10}'.format(gpsmet[i][0],gpsmet[i][1],gpsmet[i][2],gpsmet[i][3],gpsmet[i][6],gpsmet[i][7],gpsmet[i][8],gpsmet[i][9],gpsmet[i][10],gpsmet[i][11],gpsmet[i][12]))
+            print('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9}'.format(gpsmet[i][0],gpsmet[i][1],gpsmet[i][2],gpsmet[i][3],gpsmet[i][6],gpsmet[i][8],gpsmet[i][9],gpsmet[i][10],gpsmet[i][11],gpsmet[i][12]))
 
     print("Done.")
 except FileNotFoundError as e:

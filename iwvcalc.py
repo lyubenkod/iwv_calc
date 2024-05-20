@@ -75,41 +75,49 @@ def read_met_from_wrf(files,stations):
 
     return points
 
-def read_stations_latlon(file,stations):
+def read_stations_latlon(file,stations, add_all = False):
     line = file.readline()
     # assuming the line that is read is the first line of +SITE/ID
     # *STATION__ PT __DOMES__ T _STATION DESCRIPTION__ _LONGITUDE _LATITUDE_ _HGT_ELI_ _HGT_MSL_
     # => [*STATION__, PT, __DOMES__, T,_STATION DESCRIPTION__, _LONGITUDE, _LATITUDE_, _HGT_ELI_, _HGT_MSL_]
     cols = line.split()
+    name_index = -1
     lon_index = -1
     lat_index = -1
     alt_index = -1
     for i in range(len(cols)):
-        if 'LONGITUDE' in cols[i]:
+        if 'LONGITUDE' in cols[i] and lon_index == -1:
             lon_index = i
-        if 'LATITUDE' in cols[i]:
+        if 'LATITUDE' in cols[i] and lat_index == -1:
             lat_index = i
-        if 'HGT_MSL' in cols[i]:
+        if 'HGT_MSL' in cols[i] and alt_index == -1:
             alt_index = i
+        if 'STATION' in cols[i] and name_index == -1:
+            name_index = i
 
-    if lat_index == -1 or lon_index == -1 or alt_index == -1:
-        print("Couldn't find longitude, latitude or altitude in snx file...")
+    if name_index == -1 or lat_index == -1 or lon_index == -1 or alt_index == -1:
+        print("Couldn't find station name, longitude, latitude or altitude in snx file...")
         file.close()
         sys.exit(1)
 
+    line = file.readline()
     while not line.startswith('-SITE/ID'):
         line = line.split()
 
-        # if column is missing
+        # TODO Refactor
+        # if column is missing and assuming that lon,lat,alt are at end
         diff = len(cols) - len(line)
 
-        station_name = line[0].strip()
+        station_name = line[name_index].strip()
+        if add_all and stations.get(station_name) == None:
+            stations[station_name] = Station(station_name)
+
         if stations.get(station_name) != None: 
             stations[station_name].lon = float(line[lon_index-diff])
             stations[station_name].lat = float(line[lat_index-diff])
             stations[station_name].alt = float(line[alt_index-diff])
-
         line = file.readline()
+
     
     not_found_stations = []
     for station_name in stations:
@@ -175,7 +183,7 @@ def read_gps_from_snx(file,station_names):
         if line.startswith("+TROP/SOLUTION"):
             read_trop_solution(snx,stations)
         elif line.startswith("+SITE/ID"):
-            read_stations_latlon(snx,stations)
+            read_stations_latlon(snx,stations,len(stations) == 0)
             
     snx.close()
     return list(stations.values())
@@ -184,7 +192,7 @@ def read_gps_from_snx(file,station_names):
 argv = {
     "snx-file": '', #one
     "wrf-file": '', #multiple
-    "station": '', #multiple
+    "station": '', #multiple, optional
     "o": '', #optional
 }
 # cli arguments
@@ -199,6 +207,8 @@ for i in range(1,len(sys.argv),2):
 
 if ',' in argv["station"]:
     argv["station"] = argv["station"].split(',')
+elif argv["station"] == '':
+    argv["station"] = []
 else:
     argv["station"] = [argv["station"]]
 
@@ -222,7 +232,7 @@ if not os.path.isfile(argv['snx-file']):
     print(file,"doesn't exist.")
     sys.exit(1)
 
-if argv['snx-file'] == '' or len(argv['wrf-file']) == 0 or len(argv['station']) == 0:
+if argv['snx-file'] == '' or len(argv['wrf-file']) == 0:
     print("Missing required arguments. Exiting...")
     sys.exit(1)
 

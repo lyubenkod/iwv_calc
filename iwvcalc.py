@@ -197,7 +197,7 @@ argv = {
 }
 # cli arguments
 if len(sys.argv) == 1:
-    print("Usage: python3 iwvcalc.py --snx-file snx_file --wrf-file wrf_file --station station [--o output_file]")
+    print("Usage: python3 iwvcalc.py --snx-file snx_file --wrf-file wrf_file [--station station --o output_file]")
     sys.exit(1)
 for i in range(1,len(sys.argv),2):
     if len(sys.argv) < i+1:

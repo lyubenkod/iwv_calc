@@ -50,6 +50,7 @@ def process_station_tro(station, ncfile):
         press = Pressure[i0][j0]/100.
         # height, [m]:
         heigth = HGT[i0][j0]
+        print("HGT_MSL: ",heigth)
         # Q2_humi, [g/kg]:
         Q2_humi = Q2[i0][j0]*1000.
         # Calculation of zhd, [m] - zenith hydrostatic delay
@@ -165,13 +166,13 @@ def process_station_tro(station, ncfile):
     finally:
         return result
 
-ncfile = netcdf('../../wrf_files_usb/wrfout_d03_2024-05-10_110000')
+ncfile = netcdf('../../wrf_files_usb/wrfs/wrfout_d03_2024-05-10_110000')
 
 station = {
     'name' : 'SUZF00BGR',
     'long' : 23.329108,
     'latt' : 42.673810,
-    'alt'  : 639.679,
+    'alt'  : 639.669,
     'i0'   : 116,
     'j0'   : 66
 }

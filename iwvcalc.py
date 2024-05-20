@@ -1,77 +1,146 @@
 from datetime import datetime,timedelta
 import math
 import sys
+import os
 
 import numpy as np
 from netCDF4 import Dataset as netcdf
 
-def read_met_from_wrf(file,station_id,lonpt,latpt):
-    # Open the NetCDF file
-    ncfile = netcdf(file)
+class Station:
+    lat = -1
+    lon = -1
+    alt = -1
+    ztds = []
+    dates = []
+    def __init__(self, name):
+        self.name = name
 
-    # Extract the variables
-    time = ncfile.variables['Times']
-    temp = ncfile.variables['T2']
-    pres = ncfile.variables['PSFC']
-    lat = ncfile.variables['XLAT']
-    lon = ncfile.variables['XLONG']
+class Point:
+    def __init__(self,altitude,date,temperature,pressure,closest_station):
+        self.alt = altitude
+        self.date = date
+        self.temp = temperature
+        self.press = pressure
+        self.closest_station = closest_station
 
-    # find squared distance of every point on grid
-    dist_sq = (lat[0][:]-latpt)**2 + (lon[0][:]-lonpt)**2
-    # 1D index of minimum dist_sq element
-    minindex_flattened = dist_sq.argmin()
-    # Get 2D index for latvals and lonvals arrays from 1D index
-    i,j = np.unravel_index(minindex_flattened, lat[0][:].shape)
+class Result:
+    def __init__(self,time,ztd,temp,pressure,zhd,zwd,iwv,station):
+        self.time = time
+        self.ztd = ztd
+        self.temp = temp
+        self.press = pressure
+        self.zhd = zhd
+        self.zwd = zwd
+        self.iwv = iwv
+        self.station_name = station.name
+        self.lat = station.lat
+        self.lon = station.lon
+        self.alt = station.alt
+        
 
-    date = datetime.strptime(time[0].tobytes().decode("utf-8"),"%Y-%m-%d_%H:%M:%S")
-    temperature = temp[0][i][j]-273.15
-    pressure = pres[0][i][j]/100
+# One point for pair (lonpt,latpt)
+def read_met_from_wrf(files,stations):
+    points = []
+    for file in files:
+        # Open the NetCDF file
+        ncfile = netcdf(file)
 
-    ncfile.close()
+        # Extract the variables
+        time = ncfile.variables['Times']
+        temp = ncfile.variables['T2']
+        pres = ncfile.variables['PSFC']
+        lat = ncfile.variables['XLAT']
+        lon = ncfile.variables['XLONG']
 
-    return [station_id,date,temperature,pressure]
+        # find squared distance of every point on grid
+        for station in stations:
+            dist_sq = (lat[0][:]-station.lat)**2 + (lon[0][:]-station.lon)**2
+            # 1D index of minimum dist_sq element
+            minindex_flattened = dist_sq.argmin()
+            # Get 2D index for latvals and lonvals arrays from 1D index
+            i,j = np.unravel_index(minindex_flattened, lat[0][:].shape)
 
-def read_stations_latlon(file,station):
-    lat,lon = -1, -1
+            date = datetime.strptime(time[0].tobytes().decode("utf-8"),"%Y-%m-%d_%H:%M:%S")
+            temperature = temp[0][i][j]-273.15
+            pressure = pres[0][i][j]/100
+            alt = ncfile.variables["HGT"][0][i][j]
+            points.append(Point(alt,date,temperature,pressure,station.name))
+
+        ncfile.close()
+
+    return points
+
+def read_stations_latlon(file,stations):
     line = file.readline()
     # assuming the line that is read is the first line of +SITE/ID
     # *STATION__ PT __DOMES__ T _STATION DESCRIPTION__ _LONGITUDE _LATITUDE_ _HGT_ELI_ _HGT_MSL_
-    # => [STATION__, PT, __DOMES__, T, STATION DESCRIPTION__, _LONGITUDE, _LATITUDE_, _HGT_ELI_, _HGT_MSL_]
+    # => [*STATION__, PT, __DOMES__, T,_STATION DESCRIPTION__, _LONGITUDE, _LATITUDE_, _HGT_ELI_, _HGT_MSL_]
     cols = line.split()
-    lensum = 0
-    lon_location = -1
-    for col in cols:
-        if 'LONGITUDE' in col:
-            lon_location = lensum + 1
-            break
-        lensum += len(col) + 1
+    lon_index = -1
+    lat_index = -1
+    alt_index = -1
+    for i in range(len(cols)):
+        if 'LONGITUDE' in cols[i]:
+            lon_index = i
+        if 'LATITUDE' in cols[i]:
+            lat_index = i
+        if 'HGT_MSL' in cols[i]:
+            alt_index = i
 
-    lat_location = -1
-    lensum = 0
-    for col in cols:
-        if 'LATITUDE' in col:
-            lat_location = lensum + 1
-            break
-        lensum += len(col) + 1
+    if lat_index == -1 or lon_index == -1 or alt_index == -1:
+        print("Couldn't find longitude, latitude or altitude in snx file...")
+        file.close()
+        sys.exit(1)
 
     while not line.startswith('-SITE/ID'):
-        if line.startswith(" "+station) and lat_location != -1 and lon_location != -1:
-            lon,lat = (float(line[lon_location:].split()[0]),float(line[lat_location:].split()[0]))
+        line = line.split()
+
+        # if column is missing
+        diff = len(cols) - len(line)
+
+        station_name = line[0].strip()
+        if stations.get(station_name) != None: 
+            stations[station_name].lon = float(line[lon_index-diff])
+            stations[station_name].lat = float(line[lat_index-diff])
+            stations[station_name].alt = float(line[alt_index-diff])
 
         line = file.readline()
-    return lon,lat
+    
+    not_found_stations = []
+    for station_name in stations:
+        if stations[station_name].lon == -1 or stations[station_name].lat == -1 or stations[station_name].alt == -1:
+            not_found_stations.append(station_name)
+            print("Station",station_name,"not found, removing...")
+    
+    for station_name in not_found_stations:
+        stations.pop(station_name,None)
 
 
-def read_trop_solution(file,station):
-    result = []
+def read_trop_solution(file,stations):
     line = file.readline()
-    while not line.startswith('-TROP/SOLUTION'):
-        if line.startswith(" "+station):
-            formatted = line.strip().split(' ')[:3]
-            # Reading TROTOT
-            date = formatted[1].split(':')
-            day_in_seconds = float(date[2])
+    cols = line.split()
+    epoch_index = -1
+    ztd_index = -1
+    for i in range(len(cols)):
+        if 'EPOCH' in cols[i]:
+            epoch_index = i
+        if 'TROTOT' in cols[i]:
+            ztd_index = i
 
+    if epoch_index == -1 or ztd_index == -1:
+        print("Couldn't find time or ztd in snx file...") 
+        file.close()
+        sys.exit(1)
+
+    while not line.startswith('-TROP/SOLUTION'):
+        line = line.split()
+        station_name = line[0].strip()
+
+        if stations.get(station_name) != None:
+            date = line[epoch_index].split(':')
+
+            # Calculate epoch into datetime
+            day_in_seconds = float(date[2])
             day_in_hours = day_in_seconds/3600
             hours = math.floor(day_in_hours)
             minutes_full = (day_in_hours-hours)*60
@@ -80,19 +149,18 @@ def read_trop_solution(file,station):
             actual_date = datetime(int(date[0]),1,1) + timedelta(int(date[1])-1)
             actual_date += timedelta(0,seconds,0,0,minutes,hours,0)
 
-            formatted[1] = actual_date
-            formatted[2] = float(formatted[2])/1000
-
-            result.append(formatted)
+            # add data to station
+            stations[station_name].dates.append(actual_date)
+            stations[station_name].ztds.append(float(line[ztd_index])/1000)
 
         line = file.readline()
-    return result
 
 
-def read_gps_from_snx(file,station):
-    gps = []
+def read_gps_from_snx(file,station_names):
     snx = open(file,'r')
-    lon,lat = -1, -1
+    stations = {}
+    for station_name in station_names:
+        stations[station_name] = Station(station_name)
 
     while True:
         line = snx.readline()
@@ -100,25 +168,24 @@ def read_gps_from_snx(file,station):
             break
 
         if line.startswith("+TROP/SOLUTION"):
-            gps = read_trop_solution(snx,station)
+            read_trop_solution(snx,stations)
         elif line.startswith("+SITE/ID"):
-            lon,lat = read_stations_latlon(snx,station)
+            read_stations_latlon(snx,stations)
             
     snx.close()
-    return [gps,(lon,lat)]
+    return list(stations.values())
 
 
 # snx, wrf [if coords are not provided from snx => lat,lon], station id, stat1.dat, stat2.dat, (output file, default is text)
 argv = {
-    "snx_file": '',
-    "wrf_file": '',
-    "station": '',
-    "output_file": '', #optional
+    "snx-file": '', #one
+    "wrf-file": '', #multiple
+    "station": '', #multiple
+    "o": '', #optional
 }
-#TODO integrate stat1 and stat2 files directly
 # cli arguments
 if len(sys.argv) == 1:
-    print("Usage: python3 gnut_iwv.py --snx_file snx_file --wrf_file wrf_file --station station [--output_file output_file]")
+    print("Usage: python3 iwvcalc.py --snx-file snx_file --wrf-file wrf_file --station station [--o output_file]")
     sys.exit(1)
 for i in range(1,len(sys.argv),2):
     if len(sys.argv) < i+1:
@@ -126,211 +193,202 @@ for i in range(1,len(sys.argv),2):
         sys.exit(1)
     argv[sys.argv[i][2:]] = sys.argv[i+1]
 
-if argv['snx_file'] == '' or argv['wrf_file'] == '' or argv['station'] == '' or argv['gps_stat_file'] == '' or argv['met_stat_file'] == '':
+if ',' in argv["station"]:
+    argv["station"] = argv["station"].split(',')
+else:
+    argv["station"] = [argv["station"]]
+
+if ',' in argv["wrf-file"]:
+    argv["wrf-file"] = argv["wrf-file"].split(',')
+else:
+    if os.path.isdir(argv["wrf-file"]):
+        path = argv["wrf-file"]
+        argv["wrf-file"] = []
+        for file in os.listdir(path):
+            argv["wrf-file"].append(path+"/"+file)
+    else:
+        argv["wrf-file"] = [argv["wrf-file"]]
+
+for file in argv["wrf-file"]:
+    if not os.path.isfile(file):
+        print(file,"doesn't exist.")
+        sys.exit(1)
+
+if not os.path.isfile(argv['snx-file']):
+    print(file,"doesn't exist.")
+    sys.exit(1)
+
+if argv['snx-file'] == '' or len(argv['wrf-file']) == 0 or len(argv['station']) == 0:
     print("Missing required arguments. Exiting...")
     sys.exit(1)
 
 
 try:
-    gps_all, (lon,lat) = read_gps_from_snx(argv["snx_file"],argv["station"])
-    if len(gps_all) == 0:
-        print("No GPS data found. Exiting...")
+    stations = read_gps_from_snx(argv["snx-file"],argv["station"])
+    if len(stations) == 0:
+        print("No stations found. Exiting...")
         sys.exit(1)
-    #gps_all[i][0]=station
-    #gps_all[i][1]=datetime
-    #gps_all[i][2]=ZTD
-
-    if lon == -1 or lat == -1:
-        print("No coordinates found. Exiting...")
-        sys.exit(1)
+    # print("Stations len:",len(stations))
+    # for station in stations:
+    #     print(station.lon)
 
     #met
-    #TODO why is met in 2 dimensional array (time ?, multiple wrfs ?)
-    met_all = [read_met_from_wrf(argv['wrf_file'],argv["station"],lon,lat)]
-    if len(met_all[0]) == 0:
-        print("No data found from wrf file. Exiting...")
-        sys.exit(1)
-    # print(met_all)
-
-    #met_all[i][0]=station
-    #met_all[i][1]=datetime
-    #met_all[i][2]=temp
-    #met_all[i][3]=pressure
-
-    #coords
-    fid = open(argv['gps_stat_file'])
-    gpsstat = fid.readlines()
-    fid.close()
-
-    gpsstat[0] = gpsstat[0].removesuffix('\n').split()
-    gpsstat[0][0] = int(gpsstat[0][0])
-    gpsstat[0][1] = float(gpsstat[0][1])
-    gpsstat[0][2] = float(gpsstat[0][2])
-    gpsstat[0][3] = int(gpsstat[0][3])
-    gpsstat[0][4] = float(gpsstat[0][4])
-    gpsstat = gpsstat[0]
-
-    #gpstat[0]=station_id
-    #gpstat[1]=station_altitude
-    #gpstat[2]=station_latitude
-    #gpstat[3]=source_id
-    #gpstat[4]=station_longitude
-
-    fid = open(argv['met_stat_file'])
-    metstat = fid.readlines()
-    fid.close()
-
-    metstat[0] = metstat[0].removesuffix('\n').split('\t')
-    metstat[0][0] = int(metstat[0][0])
-    metstat[0][1] = float(metstat[0][1])
-    metstat[0][2] = float(metstat[0][2])
-    metstat[0][3] = int(metstat[0][3])
-    metstat = metstat[0]
-
-    #metstat[0]=station_id
-    #metstat[1]=station_altitude
-    #metstat[2]=station_latitude
-    #metstat[3]=source_id
+    points = read_met_from_wrf(argv['wrf-file'],stations)
+    if len(points) == 0:
+       print("No data found from wrf file. Exiting...")
+       sys.exit(1)
+    
+    # print("Points len:",len(points))
+    points = sorted(points,key=lambda x: x.date)
+    # for point in points:
+    #     print(point.alt)
 
     #average datetime intervals
 
-    t = met_all[0][1]
-    step = timedelta(0,0,0,0,5,0,0) # 5 mins
-    met = []
-    gps = []
+    results = {}
+    for station in stations:
+        t = points[0].date
+        step = timedelta(0,0,0,0,5,0,0) # 5 mins
+        met = []
+        gps = []
+        point_alt = -1
 
-    while t <= met_all[-1][1] + step:
-        celc = 0
-        hpa = 0
-        count = 0
-        for i in range(len(met_all)):
-            # if between step time 
-            if met_all[i][1] > t-step/2 and met_all[i][1] < t+step/2:
-                celc += met_all[i][2]
-                hpa += met_all[i][3]
-                count += 1
+        while t <= points[-1].date + step:
+            celc = 0
+            hpa = 0
+            count = 0
+            for point in points:
+                # if between step time 
+                if point.closest_station == station.name and point.date > t-step/2 and point.date < t+step/2:
+                    celc += point.temp
+                    hpa += point.press
+                    count += 1
+                    point_alt = point.alt
 
-        # take average
-        if count > 0:
-            met.append([t,celc/count,hpa/count])
-        
-        ztd = 0
-        count = 0
-        for i in range(len(gps_all)):
-            # if between step time 
-            # print(gps_all[i][1])
-            # print(t-step/2)
-            if gps_all[i][1] > t-step/2 and gps_all[i][1] < t+step/2:
-                ztd += gps_all[i][2]
-                count += 1
-        
-        # take average
-        if count > 0:
-            gps.append([t,ztd/count])
+            # take average
+            if count > 0:
+                met.append([t,celc/count,hpa/count])
+            
+            ztd = 0
+            count = 0
+            for i in range(len(station.dates)):
+                # if between step time 
+                if station.dates[i] > t-step/2 and station.dates[i] < t+step/2:
+                    ztd += station.ztds[i]
+                    count += 1
+            
+            # take average
+            if count > 0:
+                gps.append([t,ztd/count])
 
-        t += step
+            t += step
 
-    #met[i][0] = time
-    #met[i][1] = temp
-    #met[i][2] = pressure
+        #met[i][0] = time
+        #met[i][1] = temp
+        #met[i][2] = pressure
 
-    #gps[i][0] = time
-    #gps[i][1] = ztd
+        #gps[i][0] = time
+        #gps[i][1] = ztd
 
-    # datetime matching
-    gpsmet = []
-    for i in range(len(gps)):
-        for j in range(len(met)):
-            # gps time matches met time
-            # i.e. 14:00 for both, 14:05 for both, etc...
-            if gps[i][0] == met[j][0]:
-                # [time, ztd, temp, pressure,zhd,zwd,iwv,station id, source gnss id, source met id]
-                gpsmet.append([gps[i][0],gps[i][1],met[j][1],met[j][2]])
+        # datetime matching
+        gpsmet = []
+        for i in range(len(gps)):
+            for j in range(len(met)):
+                # gps time matches met time
+                # i.e. 14:00 for both, 14:05 for both, etc...
+                if gps[i][0] == met[j][0]:
+                    # [time, ztd, temp, pressure,zhd,zwd,iwv,station id, source gnss id, source met id]
+                    gpsmet.append([gps[i][0],gps[i][1],met[j][1],met[j][2]])
 
-    if len(gpsmet) == 0:
-        print("No matching times found. Exiting...")
-        sys.exit(1) 
-    #gpsmet[i][0] = time
-    #gpsmet[i][1] = ztd
-    #gpsmet[i][2] = temp
-    #gpsmet[i][3] = pressure
+        if len(gpsmet) == 0:
+            print("No matching times found. Exiting...")
+            sys.exit(1) 
+        #gpsmet[i][0] = time
+        #gpsmet[i][1] = ztd
+        #gpsmet[i][2] = temp
+        #gpsmet[i][3] = pressure
 
-    # IWV Calcs
-    press = 1013.25 * ( - ( 1 - 0.0000226 * metstat[1] ) ** 5.225 + ( 1 - 0.0000226 * gpsstat[2] ) ** 5.225 );  
-    g = -9.806 #%m/s^2
-    M = 0.0289644 #%kg/mol
-    R = 8.31432 #%N·m/(mol·K)
-    T = 288.15 #%K
-    L = -0.0065 #%Temperature Lapse Rate K/m
+        # IWV Calcs
+        press = 1013.25 * ( - ( 1 - 0.0000226 * point_alt ) ** 5.225 + ( 1 - 0.0000226 * station.lat ) ** 5.225 );  
+        g = -9.806 #%m/s^2
+        M = 0.0289644 #%kg/mol
+        R = 8.31432 #%N·m/(mol·K)
+        T = 288.15 #%K
+        L = -0.0065 #%Temperature Lapse Rate K/m
 
-    temp = - L * (metstat[1] - gpsstat[1])
-    c0 = 0.0000024
-    c1 = 0.0022768
-    c2 = 0.00266
-    c3 = 0.00028
+        temp = - L * (point_alt - station.alt)
+        c0 = 0.0000024
+        c1 = 0.0022768
+        c2 = 0.00266
+        c3 = 0.00028
 
-    ef = []
-    Tm = []
-    ak = []
+        ef = []
+        Tm = []
+        ak = []
 
-    for i in range(len(gpsmet)):
-        gpsmet[i][2] += temp
-        T = gpsmet[i][2] + 273.15
-
-        gpsmet[i][3] *= (T/(T+L*(metstat[1]-gpsstat[1])))**(g*M/(R*L))
-
-        ef.append(1-c2*math.cos(2*(gpsstat[2]*math.pi)/180) - c3*gpsstat[1]/1000)
-
-        # same as line 152 ?
-        Tm.append(70.2 + 0.72 * (gpsmet[i][2]+273.16))
-
-        ak.append((10.0**5)/(461.51*(((3.776*(10.0**5))/Tm[-1] + 22))))
-
-        gpsmet[i].append((c1*gpsmet[i][3])/ef[-1]) # zhd
-
-        gpsmet[i].append(gpsmet[i][1] - gpsmet[i][-1]) # zwd
-
-        gpsmet[i].append(ak[-1]*gpsmet[i][-1]*1000) # iwv
-
-        # gps station id
-        # gpsmet[i].append(gpsstat[0])
-        # gps source id
-        gpsmet[i].append(gpsstat[3])
-        # met source_id
-        gpsmet[i].append(metstat[3])
-        # station latitude
-        gpsmet[i].append(gpsstat[2])
-        # station altitude
-        gpsmet[i].append(gpsstat[1])
-        # station longitude
-        gpsmet[i].append(gpsstat[4])
-
-    #gpsmet[i][0] = time
-    #gpsmet[i][1] = ztd
-    #gpsmet[i][2] = temp
-    #gpsmet[i][3] = pressure
-    #gpsmet[i][4] = zhd
-    #gpsmet[i][5] = zwd
-    #gpsmet[i][6] = iwv
-    #gpsmet[i][8] = source gnss id
-    #gpsmet[i][9] = source met id
-    #gpsmet[i][10] = station_latitude
-    #gpsmet[i][11] = station_altitude
-    #gpsmet[i][12] = station_longitude
-
-    # TODO Find out if need to save in troposinex format
-    if argv['output_file'] != '':
-        print("Writing to file {0}".format(argv['output_file']))
-        fid = open(argv['output_file'],'w')
-        fid.write('time,ztd,temp,pressure,zhd,zwd,iwv,source_gnss_id,source_met_id,station_latitude,station_altitude,station_longitude\n')
         for i in range(len(gpsmet)):
-            fid.write('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12}\n'.format(gpsmet[i][0],gpsmet[i][1],gpsmet[i][2],gpsmet[i][3],gpsmet[i][4],gpsmet[i][5],gpsmet[i][6],gpsmet[i][7],gpsmet[i][8],gpsmet[i][9],gpsmet[i][10],gpsmet[i][11]))
+            gpsmet[i][2] += temp
+            T = gpsmet[i][2] + 273.15
+
+            gpsmet[i][3] *= (T/(T+L*(point_alt-station.alt)))**(g*M/(R*L))
+
+            ef.append(1-c2*math.cos(2*(station.lat*math.pi)/180) - c3*station.alt/1000)
+
+            Tm.append(70.2 + 0.72 * (gpsmet[i][2]+273.16))
+
+            ak.append((10.0**5)/(461.51*(((3.776*(10.0**5))/Tm[-1] + 22))))
+
+            gpsmet[i].append((c1*gpsmet[i][3])/ef[-1]) # zhd
+
+            gpsmet[i].append(gpsmet[i][1] - gpsmet[i][-1]) # zwd
+
+            gpsmet[i].append(ak[-1]*gpsmet[i][-1]*1000) # iwv
+
+            # station latitude
+            gpsmet[i].append(station.lat)
+            # station altitude
+            gpsmet[i].append(station.alt)
+            # station longitude
+            gpsmet[i].append(station.lon)
+
+            #TODO Refactor
+            if results.get(station.name,None) == None:
+                results[station.name] = []
+            results[station.name].append(Result(gpsmet[i][0],gpsmet[i][1],gpsmet[i][2],gpsmet[i][3],gpsmet[i][4],gpsmet[i][5],gpsmet[i][6],station))
+
+        #gpsmet[i][0] = time
+        #gpsmet[i][1] = ztd
+        #gpsmet[i][2] = temp
+        #gpsmet[i][3] = pressure
+        #gpsmet[i][4] = zhd
+        #gpsmet[i][5] = zwd
+        #gpsmet[i][6] = iwv
+        #gpsmet[i][7] = station_latitude
+        #gpsmet[i][8] = station_altitude
+        #gpsmet[i][9] = station_longitude
+
+    # TODO Save in troposinex format
+    if argv['o'] != '':
+        fid = open(argv['o'],'w')
+        fid.write('time,ztd,temp,pressure,zhd,zwd,iwv,station_latitude,station_altitude,station_longitude\n')
+        for i in range(len(gpsmet)):
+            for value in gpsmet[i]:
+                fid.write("{}".format(value))
+            fid.write('\n')
         fid.close()
     else:
-        for i in range(len(gpsmet)):
-            print('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9}'.format(gpsmet[i][0],gpsmet[i][1],gpsmet[i][2],gpsmet[i][3],gpsmet[i][6],gpsmet[i][8],gpsmet[i][9],gpsmet[i][10],gpsmet[i][11],gpsmet[i][12]))
+        print('station,time,ztd,temp,pressure,zhd,zwd,iwv,station_latitude,station_altitude,station_longitude')
+        for station in stations:
+            for result in results[station.name]:
+                print(result.station_name,end=' ')
+                print(result.time,end=' ')
+                print(result.ztd,end=' ')
+                print(result.temp,end=' ')
+                print(result.press,end=' ')
+                print(result.zhd,end=' ')
+                print(result.zwd,end=' ')
+                print(result.iwv)
 
-    print("Done.")
 except FileNotFoundError as e:
     print("File not found: {0}. Exiting...".format(e.filename))
     sys.exit(1)

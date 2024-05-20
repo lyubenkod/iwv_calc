@@ -44,7 +44,6 @@ def time_into_epoch(time):
     year = time.year
     return "{}:{}:{}".format(year,day,seconds)
 
-# One point for pair (lonpt,latpt)
 def read_met_from_wrf(files,stations):
     points = []
     for file in files:
@@ -182,7 +181,6 @@ def read_gps_from_snx(file,station_names):
     return list(stations.values())
 
 
-# snx, wrf [if coords are not provided from snx => lat,lon], station id, stat1.dat, stat2.dat, (output file, default is text)
 argv = {
     "snx-file": '', #one
     "wrf-file": '', #multiple
@@ -430,7 +428,7 @@ try:
                     troposinex.write('\n {name:9s} {epoch:>7s} {IWV:>5.2f} {press:>7.2f} {temp:>7.1f} {TRODRY:>6.1f} {TROTOT:>6.1f} {TROWET:>6.1f}'
                         .format(
                         name     = result.station_name,
-                        epoch    = time_into_epoch(result.time),#station['YYYY_st']+':'+station['DOY_st']+':'+station['SSSSS_st'],
+                        epoch    = time_into_epoch(result.time),
                         IWV      = result.iwv,
                         press    = result.press,
                         temp     = result.temp+273.15,
@@ -453,7 +451,10 @@ try:
                 print(result.press,end=' ')
                 print(result.zhd,end=' ')
                 print(result.zwd,end=' ')
-                print(result.iwv)
+                print(result.iwv,end=' ')
+                print(station.lat,end=' ')
+                print(station.alt,end=' ')
+                print(station.lon)
 
 except FileNotFoundError as e:
     print("File not found: {0}. Exiting...".format(e.filename))

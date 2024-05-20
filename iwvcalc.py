@@ -37,6 +37,12 @@ class Result:
         self.lon = station.lon
         self.alt = station.alt
         
+# assumes time is datetime object
+def time_into_epoch(time):
+    day = time.timetuple().tm_yday
+    seconds = time.hour*3600 + time.minute * 60 + time.second
+    year = time.year
+    return "{}:{}:{}".format(year,day,seconds)
 
 # One point for pair (lonpt,latpt)
 def read_met_from_wrf(files,stations):
@@ -369,13 +375,73 @@ try:
 
     # TODO Save in troposinex format
     if argv['o'] != '':
-        fid = open(argv['o'],'w')
-        fid.write('time,ztd,temp,pressure,zhd,zwd,iwv,station_latitude,station_altitude,station_longitude\n')
-        for i in range(len(gpsmet)):
-            for value in gpsmet[i]:
-                fid.write("{}".format(value))
-            fid.write('\n')
-        fid.close()
+        with open(argv['o'], 'w') as troposinex:
+            troposinex.write('''%=TRO
+*---------------------------------------------------------------------------- 
++FILE/REFERENCE 
+*INFO_TYPE_____ INFO______________________________ 
+ DESCRIPTION	SUGAC 
+ OUTPUT			SUGAC 
+ CONTACT		GUEROVA 
+ SOFTWARE		WRFv3.7.1 
+ INPUT			NWM 
+ VERSION NUMBER	001 
+-FILE/REFERENCE 
+*---------------------------------------------------------------------------- 
++TROP/DESCRIPTION 
+*_____KEYWORD_______        __VALUE(S)________________
+ REFRACTIVITY COEFFICIENTS 	77.60 70.40 373900.0
+ TROPO SAMPLING INTERVAL 	3600
+ TIME SYSTEM 			    UTC
+ TROPO PARAMETER NAMES		IWV PRESS TEMDRY TRODRY TROTOT TROWET
+ TROPO PARAMETER UNITS		  1     1      1  1e+03  1e+03  1e+03
+ TROPO PARAMETER WIDTH		  6     6      6      6      6      6
+-TROP/DESCRIPTION 
+*---------------------------------------------------------------------------- 
++SITE/ID 
+*STATION__ _LONGITUDE _LATITUDE_ _HGT_MSL_''')
+            for station in stations:
+                troposinex.write('\n {name:>9} {longit:>10.6f} {latt:>10.6f} {alt:>9.3f}'
+					.format(
+					name     = station.name,
+					longit   = station.lon,
+					latt     = station.lat,
+					alt      = station.alt
+				))
+            troposinex.write('''
+-SITE/ID
+*----------------------------------------------------------------------------
++SITE/COORDINATES
+-SITE/COORDINATES
+*----------------------------------------------------------------------------
++TROP/SOLUTION
+*STATION__ ____EPOCH_____ _IWV_ __PRESS TEMPDRY TRODRY TROTOT TROWET''')
+# FIELD NAMES:
+# Station = station name
+# Epoch   = timestamp YY:DDD:SSSSS
+# IWV     = Integrated water vapour, [kg/m^2]
+# PRESS   = Pressure, [Pa]
+# TEMPDRY = Dry temperature temp, [K]
+# TRODRY  = zhd_mm, [mm]
+# TROTOT  = ZTD_mm, [mm]
+# TROWET  = ZWD_mm, [mm]
+            for station in stations:
+                for result in results[station.name]:
+                    troposinex.write('\n {name:9s} {epoch:>7s} {IWV:>5.2f} {press:>7.2f} {temp:>7.1f} {TRODRY:>6.1f} {TROTOT:>6.1f} {TROWET:>6.1f}'
+                        .format(
+                        name     = result.station_name,
+                        epoch    = time_into_epoch(result.time),#station['YYYY_st']+':'+station['DOY_st']+':'+station['SSSSS_st'],
+                        IWV      = result.iwv,
+                        press    = result.press,
+                        temp     = result.temp+273.15,
+                        TRODRY   = result.zhd,
+                        TROTOT   = result.ztd,
+                        TROWET   = result.zwd
+                    ))
+            troposinex.write('''\n-TROP/SOLUTION
+%=ENDTRO
+''')
+            troposinex.close()
     else:
         print('station,time,ztd,temp,pressure,zhd,zwd,iwv,station_latitude,station_altitude,station_longitude')
         for station in stations:
